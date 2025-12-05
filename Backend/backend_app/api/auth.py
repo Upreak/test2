@@ -224,7 +224,7 @@ async def get_current_user_info(
     """
     try:
         # Update last active timestamp
-        user_repo = UserRepository(current_user)
+        user_repo = UserRepository(db)
         user_repo.update_last_active(current_user)
         
         return UserResponse(
