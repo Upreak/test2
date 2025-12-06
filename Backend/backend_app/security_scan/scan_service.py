@@ -6,7 +6,12 @@ Interface definitions for file scanning operations using ClamAV.
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+import os
+import time
+import subprocess
+import mimetypes
 from .io_contract import ScanRequest, ScanResult, ScanStatus
+from .config import get_config
 
 
 class ScanService(ABC):
@@ -73,6 +78,37 @@ class ClamAVScanService(ScanService):
             ScanResult: The result of the scan operation
         """
         try:
+            # Get file size
+            file_size = os.path.getsize(scan_request.file_path)
+            
+            # Check size limits
+            config = get_config()
+            
+            if file_size > config.max_hard_limit_mb * 1024 * 1024:
+                # File exceeds hard limit (15MB)
+                return ScanResult(
+                    status=ScanStatus.REJECTED_SIZE_LIMIT,
+                    details={
+                        'engine': 'SizeValidation',
+                        'error': f'File exceeds {config.max_hard_limit_mb}MB limit',
+                        'file_size_bytes': file_size,
+                        'scan_time': None
+                    },
+                    file_size_bytes=file_size
+                )
+            elif file_size > config.max_upload_size_mb * 1024 * 1024:
+                # File exceeds default limit (5MB) but under hard limit
+                return ScanResult(
+                    status=ScanStatus.REJECTED_SIZE_LIMIT,
+                    details={
+                        'engine': 'SizeValidation',
+                        'error': f'File exceeds {config.max_upload_size_mb}MB default limit, please compress and retry',
+                        'file_size_bytes': file_size,
+                        'scan_time': None
+                    },
+                    file_size_bytes=file_size
+                )
+            
             # Run ClamAV scan
             clamav_result = self.run_clamav_scan(scan_request.file_path)
             
@@ -109,6 +145,7 @@ class ClamAVScanService(ScanService):
             scan_result = ScanResult(
                 status=status,
                 details=details,
+                file_size_bytes=file_size,
                 safe_path=safe_path,
                 infected_path=infected_path
             )
@@ -150,9 +187,6 @@ class ClamAVScanService(ScanService):
         # 2. Execute the scan
         # 3. Parse and return results
         
-        import subprocess
-        import time
-        
         try:
             start_time = time.time()
             
@@ -191,3 +225,70 @@ class ClamAVScanService(ScanService):
                 f"Timestamp: {scan_result.timestamp}, "
                 f"Details: {scan_result.details}"
             )
+    
+    def scan_and_return_paths(self, file_bytes: bytes, original_filename: str, quarantine_manager: 'FileQuarantineManager') -> tuple:
+        """
+        Orchestrator-ready helper method to scan a file and return paths.
+        
+        This method:
+        1. Moves file to incoming folder
+        2. Runs scan
+        3. Returns status and appropriate path (safe or infected)
+        
+        Args:
+            file_bytes (bytes): File content as bytes
+            original_filename (str): Original filename
+            quarantine_manager (FileQuarantineManager): Quarantine manager instance
+            
+        Returns:
+            tuple: (status: str, path: str or None)
+                   status: "SAFE", "INFECTED", or "ERROR"
+                   path: Path to safe file, infected file, or None if error
+        """
+        try:
+            # Move to incoming folder
+            incoming_path = quarantine_manager.move_to_incoming(file_bytes, original_filename)
+            
+            # Move to scanning folder
+            scanning_path = quarantine_manager.move_to_scanning(incoming_path)
+            
+            # Create scan request
+            scan_request = ScanRequest(
+                file_id=f"orchestrator_{quarantine_manager._generate_unique_id()}",
+                file_path=scanning_path,
+                mime_type=self._guess_mime_type(original_filename)
+            )
+            
+            # Perform scan
+            scan_result = self.scan_file(scan_request)
+            
+            # Return appropriate path based on status
+            if scan_result.status == ScanStatus.SAFE:
+                # Move to clean folder and return clean path
+                clean_path = quarantine_manager.mark_as_safe(scanning_path)
+                return ("SAFE", clean_path)
+            elif scan_result.status == ScanStatus.INFECTED:
+                # Move to infected folder and return infected path
+                infected_path = quarantine_manager.mark_as_infected(scanning_path)
+                return ("INFECTED", infected_path)
+            else:
+                # ERROR status - keep in scanning folder
+                return ("ERROR", scanning_path)
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Orchestrator scan failed: {str(e)}")
+            return ("ERROR", None)
+    
+    def _guess_mime_type(self, filename: str) -> str:
+        """
+        Guess MIME type from filename extension.
+        
+        Args:
+            filename (str): Original filename
+            
+        Returns:
+            str: Guessed MIME type
+        """
+        mime_type, _ = mimetypes.guess_type(filename)
+        return mime_type or "application/octet-stream"

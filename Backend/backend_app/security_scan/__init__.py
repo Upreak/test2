@@ -25,6 +25,18 @@ from .scan_service import ScanService, ClamAVScanService
 from .quarantine_manager import QuarantineManager, FileQuarantineManager
 from .virus_update_manager import VirusUpdateManager, ClamAVUpdateManager
 from .cron_scheduler import CronScheduler, APSchedulerManager
+from .middleware import ScanActivityLoggerMiddleware
+from .di_container import (
+    SecurityScanContainer,
+    SecurityScanOrchestrator,
+    configure_container,
+    get_security_scan_orchestrator,
+    create_scan_service,
+    create_quarantine_manager,
+    create_virus_update_manager,
+    create_scheduler,
+    security_scan_health_check
+)
 
 # Version information
 __version__ = "1.0.0"
@@ -34,7 +46,7 @@ __author__ = "Security Scan Module Team"
 __all__ = [
     # IO Contracts
     "ScanRequest",
-    "ScanResult", 
+    "ScanResult",
     "VirusUpdateStatus",
     "ScanStatus",
     
@@ -47,4 +59,18 @@ __all__ = [
     "ClamAVUpdateManager",
     "CronScheduler",
     "APSchedulerManager",
+    
+    # Middleware
+    "ScanActivityLoggerMiddleware",
+    
+    # Dependency Injection
+    "SecurityScanContainer",
+    "SecurityScanOrchestrator",
+    "configure_container",
+    "get_security_scan_orchestrator",
+    "create_scan_service",
+    "create_quarantine_manager",
+    "create_virus_update_manager",
+    "create_scheduler",
+    "security_scan_health_check"
 ]

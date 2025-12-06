@@ -31,8 +31,13 @@ class SecurityScanConfig:
         self.clamav_socket = None  # None for localhost, or specify socket path
         self.clamav_timeout = 30  # seconds
         
-        # Security settings
-        self.max_file_size = 50 * 1024 * 1024  # 50MB
+        # Security settings - File Size Validation
+        # Default mode: 5 MB
+        # Optional extended mode: 10 MB  
+        # Never accept >15 MB (hard limit)
+        self.max_upload_size_mb = 5  # Default upload limit: 5MB
+        self.max_hard_limit_mb = 15  # Absolute fail-safe limit: 15MB
+        self.max_file_size = self.max_hard_limit_mb * 1024 * 1024  # Convert to bytes
         self.allowed_mime_types = [
             'application/pdf',
             'application/msword',
@@ -173,10 +178,18 @@ def get_config_from_env() -> SecurityScanConfig:
         except ValueError:
             pass
     
-    max_file_size = os.environ.get('MAX_FILE_SIZE')
-    if max_file_size:
+    max_upload_size = os.environ.get('MAX_UPLOAD_SIZE_MB')
+    if max_upload_size:
         try:
-            config.max_file_size = int(max_file_size)
+            config.max_upload_size_mb = int(max_upload_size)
+            config.max_file_size = config.max_upload_size_mb * 1024 * 1024
+        except ValueError:
+            pass
+    
+    max_hard_limit = os.environ.get('MAX_HARD_LIMIT_MB')
+    if max_hard_limit:
+        try:
+            config.max_hard_limit_mb = int(max_hard_limit)
         except ValueError:
             pass
     

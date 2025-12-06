@@ -100,19 +100,34 @@ async def scan_file(
     
     Workflow:
     1. Accept file upload
-    2. Move to incoming folder
-    3. Trigger scan
-    4. Return ScanResult
+    2. Check size limits (5MB default, 15MB hard limit)
+    3. Move to incoming folder
+    4. Trigger scan
+    5. Return ScanResult
+    
+    Returns:
+        HTTP 413 PAYLOAD TOO LARGE for oversized files
+        HTTP 400 BAD REQUEST for unsupported file types
+        HTTP 200 OK with ScanResult for successful scans
     """
     try:
         # Validate file size
         config = get_config()
         content = await file.read()
         
-        if len(content) > config.max_file_size:
+        file_size = len(content)
+        
+        if file_size > config.max_hard_limit_mb * 1024 * 1024:
+            # File exceeds hard limit (15MB) - immediate rejection
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large. Maximum size: {config.max_file_size} bytes"
+                detail=f"File exceeds {config.max_hard_limit_mb}MB limit"
+            )
+        elif file_size > config.max_upload_size_mb * 1024 * 1024:
+            # File exceeds default limit (5MB) but under hard limit
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds {config.max_upload_size_mb}MB default limit, please compress and retry"
             )
         
         # Validate MIME type
@@ -146,7 +161,7 @@ async def scan_file(
             final_path = quarantine_manager.mark_as_infected(scanning_path)
             response_path = final_path
         else:
-            # ERROR status - keep in scanning folder for investigation
+            # ERROR or REJECTED_SIZE_LIMIT status - keep in scanning folder for investigation
             response_path = scanning_path
         
         # Return scan result
@@ -308,3 +323,56 @@ async def health_check():
         "module": "security_scan",
         "version": "1.0.0"
     }
+
+
+@router.get("/summary")
+async def get_security_summary(
+    update_manager: ClamAVUpdateManager = Depends(get_virus_update_manager),
+    quarantine_manager: FileQuarantineManager = Depends(get_quarantine_manager),
+    scheduler: APSchedulerManager = Depends(get_scheduler)
+):
+    """
+    Lightweight health summary endpoint.
+    
+    Returns folder counts, ClamAV status, DB checksum, and scheduler status.
+    """
+    try:
+        # Get folder counts
+        folders = quarantine_manager.get_quarantine_paths()
+        folder_counts = {}
+        
+        for folder_name, folder_path in folders.items():
+            if folder_name != 'logs' and os.path.exists(folder_path):
+                try:
+                    file_count = len([
+                        f for f in os.listdir(folder_path)
+                        if os.path.isfile(os.path.join(folder_path, f))
+                    ])
+                    folder_counts[folder_name] = file_count
+                except Exception:
+                    folder_counts[folder_name] = 0
+            else:
+                folder_counts[folder_name] = 0
+        
+        # Get ClamAV status (simplified check)
+        clamav_status = "running"  # In real implementation, check ClamAV daemon
+        
+        # Get DB checksum status
+        db_status = update_manager.validate_virus_db()
+        db_checksum_valid = db_status.checksum_valid
+        
+        # Get scheduler status
+        scheduler_active = scheduler.scheduler.running
+        
+        return {
+            "folders": folder_counts,
+            "clamav": clamav_status,
+            "db_checksum_valid": db_checksum_valid,
+            "scheduler_active": scheduler_active,
+            "last_db_update": db_status.last_update.isoformat() if db_status.last_update else None,
+            "db_version": db_status.db_version
+        }
+        
+    except Exception as e:
+        logger.error(f"Security summary error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

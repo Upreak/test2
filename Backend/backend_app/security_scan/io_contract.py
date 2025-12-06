@@ -14,6 +14,7 @@ class ScanStatus(str, Enum):
     SAFE = "SAFE"
     INFECTED = "INFECTED"
     ERROR = "ERROR"
+    REJECTED_SIZE_LIMIT = "REJECTED_SIZE_LIMIT"
 
 
 class ScanRequest:
@@ -40,6 +41,7 @@ class ScanResult:
         self,
         status: ScanStatus,
         details: Dict[str, Any],
+        file_size_bytes: int = 0,
         safe_path: Optional[str] = None,
         infected_path: Optional[str] = None
     ):
@@ -47,13 +49,15 @@ class ScanResult:
         Initialize a scan result.
         
         Args:
-            status (ScanStatus): The scan status (SAFE, INFECTED, ERROR)
+            status (ScanStatus): The scan status (SAFE, INFECTED, ERROR, REJECTED_SIZE_LIMIT)
             details (Dict[str, Any]): Detailed scan information
+            file_size_bytes (int): Size of the file in bytes
             safe_path (Optional[str]): Path to safe file (if status is SAFE)
             infected_path (Optional[str]): Path to infected file (if status is INFECTED)
         """
         self.status = status
         self.details = details
+        self.file_size_bytes = file_size_bytes
         self.safe_path = safe_path
         self.infected_path = infected_path
         self.timestamp = datetime.utcnow()
