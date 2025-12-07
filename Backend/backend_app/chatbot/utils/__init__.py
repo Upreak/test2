@@ -1,19 +1,49 @@
 """
-Chatbot Utilities Module
-
-This module contains utility functions and classes for the Chatbot/Co-Pilot system.
+Chatbot Utilities Package
 """
 
-from .sid_generator import SIDGenerator
-from .normalize_phone import PhoneNormalizer
-from .message_templates import MessageTemplates, TemplateCategory
-from .skill_context import SkillContext, SkillExecutionContextManager
+from .logging import ChatbotLogger, setup_chatbot_logging
+from .timeutils import (
+    get_utc_now,
+    format_timestamp,
+    parse_timestamp,
+    is_fresh,
+    add_days,
+    get_age_in_days
+)
+from .fileutils import (
+    create_export_zip,
+    get_file_size_mb,
+    ensure_directory,
+    get_file_extension,
+    is_allowed_file_type,
+    cleanup_temp_files,
+    get_file_mime_type,
+    validate_file_size,
+    sanitize_filename
+)
 
 __all__ = [
-    'SIDGenerator',
-    'PhoneNormalizer',
-    'MessageTemplates',
-    'TemplateCategory',
-    'SkillContext',
-    'SkillExecutionContextManager'
+    # Logging
+    'ChatbotLogger',
+    'setup_chatbot_logging',
+    
+    # Time utilities
+    'get_utc_now',
+    'format_timestamp',
+    'parse_timestamp',
+    'is_fresh',
+    'add_days',
+    'get_age_in_days',
+    
+    # File utilities
+    'create_export_zip',
+    'get_file_size_mb',
+    'ensure_directory',
+    'get_file_extension',
+    'is_allowed_file_type',
+    'cleanup_temp_files',
+    'get_file_mime_type',
+    'validate_file_size',
+    'sanitize_filename'
 ]

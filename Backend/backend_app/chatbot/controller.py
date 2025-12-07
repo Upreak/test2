@@ -1,0 +1,115 @@
+"""
+Chatbot Controller
+High-level orchestration for chatbot functionality
+"""
+
+from typing import Dict, Any, Optional
+from fastapi import HTTPException
+from backend_app.chatbot.services.sid_service import SIDService
+from backend_app.chatbot.services.message_router import MessageRouter
+from backend_app.chatbot.services.llm_service import LLMService
+from backend_app.chatbot.models.session_model import UserRole
+
+
+class ChatbotController:
+    """Main controller for chatbot operations"""
+    
+    def __init__(self):
+        self.sid_service = SIDService()
+        self.message_router = MessageRouter()
+        self.llm_service = LLMService()
+    
+    async def start_session(
+        self, 
+        user_id: str, 
+        platform: str, 
+        platform_user_id: str,
+        user_role: UserRole
+    ) -> Dict[str, Any]:
+        """Start a new chatbot session"""
+        try:
+            session = await self.sid_service.create_session(
+                user_id=user_id,
+                platform=platform,
+                platform_user_id=platform_user_id,
+                user_role=user_role
+            )
+            return {
+                "session_id": session.id,
+                "user_id": session.user_id,
+                "platform": session.platform,
+                "user_role": session.user_role.value,
+                "created_at": session.created_at
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
+    
+    async def process_message(
+        self,
+        session_id: str,
+        message: str,
+        message_type: str = "text"
+    ) -> Dict[str, Any]:
+        """Process an incoming message"""
+        try:
+            session = await self.sid_service.get_session(session_id)
+            if not session:
+                raise HTTPException(status_code=404, detail="Session not found")
+            
+            # Route message to appropriate skill
+            response = await self.message_router.route_message(
+                session_id=session_id,
+                message=message,
+                message_type=message_type
+            )
+            
+            return response
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to process message: {str(e)}")
+    
+    async def get_session(self, session_id: str) -> Dict[str, Any]:
+        """Get session details"""
+        try:
+            session = await self.sid_service.get_session(session_id)
+            if not session:
+                raise HTTPException(status_code=404, detail="Session not found")
+            
+            return {
+                "session_id": session.id,
+                "user_id": session.user_id,
+                "platform": session.platform,
+                "user_role": session.user_role.value,
+                "state": session.state.value,
+                "context": session.context,
+                "created_at": session.created_at,
+                "updated_at": session.updated_at
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to get session: {str(e)}")
+    
+    async def update_session_state(
+        self,
+        session_id: str,
+        state: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Update session state and context"""
+        try:
+            session = await self.sid_service.update_session(
+                session_id=session_id,
+                state=state,
+                context=context
+            )
+            
+            return {
+                "session_id": session.id,
+                "state": session.state.value,
+                "context": session.context,
+                "updated_at": session.updated_at
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update session: {str(e)}")
