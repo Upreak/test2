@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     AI_MODEL: str = "gpt-4o-mini"
     AI_API_KEY: str = ""
     
+    # Chatbot settings
+    FRESHNESS_DAYS: int = 30
+    EXPORT_TMP_PATH: str = "/data/exports"
+    QUARANTINE_BASE_PATH: str = "/data/quarantine"
+    WHATSAPP_OUTBOUND_WEBHOOK_URL: str = ""
+    EMAIL_SENDER_SMTP_HOST: str = ""
+    EMAIL_SENDER_SMTP_PORT: int = 587
+    EMAIL_SENDER_SMTP_USERNAME: str = ""
+    EMAIL_SENDER_SMTP_PASSWORD: str = ""
+    EMAIL_SENDER_SMTP_USE_TLS: bool = True
+    
     # Logging
     LOG_LEVEL: str = "INFO"
     

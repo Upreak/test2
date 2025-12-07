@@ -1,0 +1,50 @@
+{
+  "total_files": 6,
+  "safe_files": 6,
+  "error_files": 0,
+  "total_time": 0.24310016632080078,
+  "results": [
+    {
+      "filename": "Anushya - Updated (1).pdf",
+      "status": "SAFE",
+      "file_size": 172049,
+      "scan_time": 0.1135861873626709,
+      "error": null
+    },
+    {
+      "filename": "Arijita Ghosh_Resume.pdf",
+      "status": "SAFE",
+      "file_size": 57184,
+      "scan_time": 0.01614236831665039,
+      "error": null
+    },
+    {
+      "filename": "ARUN.pdf",
+      "status": "SAFE",
+      "file_size": 61697,
+      "scan_time": 0.015250444412231445,
+      "error": null
+    },
+    {
+      "filename": "ARYA 1234 (1).pdf",
+      "status": "SAFE",
+      "file_size": 28559,
+      "scan_time": 0.01705026626586914,
+      "error": null
+    },
+    {
+      "filename": "Ashwin_Kumar.pdf",
+      "status": "SAFE",
+      "file_size": 48203,
+      "scan_time": 0.020405292510986328,
+      "error": null
+    },
+    {
+      "filename": "Bhavika HR1.docx",
+      "status": "SAFE",
+      "file_size": 27730,
+      "scan_time": 0.06066560745239258,
+      "error": null
+    }
+  ]
+}

@@ -16,10 +16,13 @@ from backend_app.db.models.activity_logs import ActivityLog
 from backend_app.db.models.clients import Client
 from backend_app.db.models.leads import Lead
 from backend_app.db.models.sales_tasks import SalesTask
+from backend_app.db.models.job_prescreen_questions import JobPrescreenQuestion
+from backend_app.db.models.prescreen_answers import PrescreenAnswer
+from backend_app.db.models.job_faq import JobFAQ
 
 __all__ = [
     "User",
-    "SystemSettings", 
+    "SystemSettings",
     "ExternalJobPosting",
     "Job",
     "CandidateProfile",
@@ -31,5 +34,8 @@ __all__ = [
     "ActivityLog",
     "Client",
     "Lead",
-    "SalesTask"
+    "SalesTask",
+    "JobPrescreenQuestion",
+    "PrescreenAnswer",
+    "JobFAQ"
 ]
