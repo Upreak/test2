@@ -27,6 +27,16 @@ export interface JobCriteria {
   isMandatory: boolean; // The "Star" logic
 }
 
+export interface PrescreenQuestion {
+  id: string;
+  text: string;
+  type: 'text' | 'number' | 'yes_no' | 'file';
+  required: boolean;
+  isKnockout: boolean; // "Must Have"
+  weight: number; // 1-5
+  idealAnswer?: string;
+}
+
 // Google for Jobs & SEO Compliant Structure
 export interface JobPost {
   id: string;
@@ -63,6 +73,7 @@ export interface JobPost {
   numberOfOpenings: number;
   applicationDeadline?: string; // ISO Date
   hiringProcessRounds: string[]; // ["Screening", "Tech Round 1", "Managerial"]
+  prescreenQuestions?: PrescreenQuestion[]; // New Field
   
   // Compliance
   noticePeriodAccepted?: string; // e.g. "Immediate to 30 Days"
@@ -276,6 +287,9 @@ export interface Candidate {
   followUpRemarks?: string;
 
   aiSummary: string;
+  
+  // Prescreen Data
+  prescreenAnswers?: Record<string, { answer: string; timestamp: string }>;
 }
 
 export interface ActionCard {

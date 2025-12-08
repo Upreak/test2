@@ -1,7 +1,5 @@
-
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { JobPost, Candidate, ActionCard, ChatMessage, WorkExperience } from '../../types';
+import { JobPost, Candidate, ActionCard, ChatMessage, WorkExperience, PrescreenQuestion } from '../../types';
 import { StorageService } from '../../services/storageService';
 import { generateChatResponse, parseJobDescriptionAI } from '../../services/geminiService';
 import { 
@@ -10,10 +8,11 @@ import {
   MessageSquare, User, Bot, AlertCircle, Send,
   UploadCloud, PlayCircle, Briefcase, Calendar,
   MoreHorizontal, Layout, Settings, Globe, Shield,
-  FileText, Eye, File, Trash2, Edit, CheckSquare,
+  FileText, Eye, File as FileIcon, Trash2, Edit, CheckSquare,
   PauseCircle, MessageCircle, Sparkles, Upload, Image, Loader2,
   Target, List, AlignLeft, Link as LinkIcon, Download, Phone, Mail, Linkedin,
-  BookOpen, GraduationCap, Contact, Play, Pause, AlertTriangle
+  BookOpen, GraduationCap, Contact, Play, Pause, AlertTriangle, HelpCircle,
+  ArrowUp, ArrowDown, Wand2, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { useToast } from '../ui/ToastContext';
 
@@ -21,6 +20,15 @@ import { useToast } from '../ui/ToastContext';
 const MOCK_ACTION_QUEUE: ActionCard[] = [
   { id: 'act-1', type: 'NEW_MATCHES', title: 'Review 5 new matches', description: 'TechFlow - Senior React Dev', priority: 'High', projectId: 'prj-1' },
   { id: 'act-2', type: 'CHAT_FOLLOWUP', title: 'Review chatbot conversation', description: 'Rahul Verma - Reply not understood', priority: 'Medium', candidateId: 'cand-1' },
+];
+
+const QUESTION_BANK = [
+  { text: "What is your current notice period?", type: "text", required: true },
+  { text: "Are you willing to relocate?", type: "yes_no", required: true },
+  { text: "What is your expected CTC?", type: "number", required: true },
+  { text: "Do you have a valid work visa?", type: "yes_no", required: true },
+  { text: "How many years of experience do you have with React?", type: "number", required: true },
+  { text: "Are you comfortable working in a night shift?", type: "yes_no", required: false },
 ];
 
 // --- EXTERNAL COMPONENTS (Defined outside to prevent re-mounts) ---
@@ -479,10 +487,230 @@ export const RecruiterWorkspace: React.FC = () => {
 
   // --- SUB-COMPONENTS ---
   
-  // New Create Job Modal (Robust parsing included)
   const CreateJobModal = () => {
+    const [title, setTitle] = useState('');
+    const [useDefaultQuestions, setUseDefaultQuestions] = useState(false);
+    const [questions, setQuestions] = useState<PrescreenQuestion[]>([]);
+    
+    // Custom Question Form State
+    const [newQText, setNewQText] = useState('');
+    const [newQType, setNewQType] = useState<PrescreenQuestion['type']>('text');
+    const [newQRequired, setNewQRequired] = useState(true);
+    const [newQKnockout, setNewQKnockout] = useState(false);
+    const [newQWeight, setNewQWeight] = useState(1);
+
     if (!showCreateJob) return null;
-    return <div className="fixed inset-0 bg-slate-900/60 z-[80] flex items-center justify-center"><div className="bg-white p-8 rounded-xl"><h3 className="font-bold">Create Job Modal (Placeholder)</h3><button onClick={() => setShowCreateJob(false)} className="mt-4 text-blue-600">Close</button></div></div>;
+
+    const toggleDefaultQuestions = () => {
+      if (!useDefaultQuestions) {
+        // Add defaults
+        const defaults: PrescreenQuestion[] = [
+          { id: 'pq-1', text: 'What is your notice period?', type: 'text', required: true, isKnockout: false, weight: 3 },
+          { id: 'pq-2', text: 'Are you willing to relocate?', type: 'yes_no', required: true, isKnockout: false, weight: 2 },
+          { id: 'pq-3', text: 'What is your current CTC?', type: 'number', required: true, isKnockout: false, weight: 3 },
+        ];
+        setQuestions(prev => [...prev, ...defaults]);
+      } else {
+        // Remove defaults (by ID prefix assumption for demo)
+        setQuestions(prev => prev.filter(q => !q.id.startsWith('pq-')));
+      }
+      setUseDefaultQuestions(!useDefaultQuestions);
+    };
+
+    const addCustomQuestion = () => {
+      if (!newQText) return;
+      const q: PrescreenQuestion = {
+        id: `custom-${Date.now()}`,
+        text: newQText,
+        type: newQType,
+        required: newQRequired,
+        isKnockout: newQKnockout,
+        weight: newQWeight
+      };
+      setQuestions([...questions, q]);
+      setNewQText('');
+      setNewQType('text');
+      setNewQRequired(true);
+      setNewQKnockout(false);
+      setNewQWeight(1);
+    };
+
+    const suggestAIQuestions = () => {
+      // Mock AI suggestion based on title
+      const suggested: PrescreenQuestion[] = [
+        { id: `ai-${Date.now()}-1`, text: `How many years of experience do you have with ${title || 'this role'}?`, type: 'number', required: true, isKnockout: true, weight: 5 },
+        { id: `ai-${Date.now()}-2`, text: 'Do you have a valid work authorization?', type: 'yes_no', required: true, isKnockout: true, weight: 5 },
+      ];
+      setQuestions(prev => [...prev, ...suggested]);
+      addToast('AI suggested 2 questions based on job title', 'success');
+    };
+
+    const moveQuestion = (index: number, direction: 'up' | 'down') => {
+      if ((direction === 'up' && index === 0) || (direction === 'down' && index === questions.length - 1)) return;
+      const newQuestions = [...questions];
+      const temp = newQuestions[index];
+      newQuestions[index] = newQuestions[index + (direction === 'up' ? -1 : 1)];
+      newQuestions[index + (direction === 'up' ? -1 : 1)] = temp;
+      setQuestions(newQuestions);
+    };
+
+    const removeQuestion = (index: number) => {
+      setQuestions(questions.filter((_, i) => i !== index));
+    };
+
+    return (
+      <div className="fixed inset-0 bg-slate-900/60 z-[80] flex items-center justify-center p-4 animate-in fade-in">
+        <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+            <h3 className="font-bold text-xl text-slate-800">Create New Job Post</h3>
+            <button onClick={() => setShowCreateJob(false)}><X size={24} className="text-slate-400 hover:text-slate-600" /></button>
+          </div>
+          
+          <div className="p-8 overflow-y-auto space-y-8 flex-1">
+            {/* Basic Info */}
+            <div className="grid grid-cols-2 gap-6">
+              <div className="col-span-2">
+                <label className="block text-sm font-bold text-slate-700 mb-1">Job Title</label>
+                <input value={title} onChange={e => setTitle(e.target.value)} className="w-full border p-2.5 rounded-lg font-bold" placeholder="e.g. Senior React Developer" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Min Salary</label>
+                <input type="number" className="w-full border p-2.5 rounded-lg" placeholder="500000" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Max Salary</label>
+                <input type="number" className="w-full border p-2.5 rounded-lg" placeholder="1200000" />
+              </div>
+            </div>
+
+            {/* Prescreen Questions Panel */}
+            <div className="border rounded-xl overflow-hidden">
+              <div className="bg-blue-50 p-4 border-b border-blue-100 flex justify-between items-center">
+                <h4 className="font-bold text-blue-900 flex items-center gap-2"><List size={18} /> Prescreen Questions</h4>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm font-medium text-blue-800 cursor-pointer">
+                    {useDefaultQuestions ? <ToggleRight size={24} className="text-blue-600" /> : <ToggleLeft size={24} className="text-slate-400" />}
+                    <input type="checkbox" className="hidden" checked={useDefaultQuestions} onChange={toggleDefaultQuestions} />
+                    Use Default Set
+                  </label>
+                  <button onClick={suggestAIQuestions} className="flex items-center gap-1 bg-white text-blue-600 px-3 py-1.5 rounded-lg text-xs font-bold border border-blue-200 hover:bg-blue-100 transition-colors">
+                    <Wand2 size={12} /> Suggest
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 space-y-4">
+                {/* List of Questions */}
+                {questions.length > 0 ? (
+                  <div className="space-y-2">
+                    {questions.map((q, idx) => (
+                      <div key={q.id} className="bg-white p-3 rounded-lg border border-slate-200 flex items-center gap-4 shadow-sm group">
+                        <div className="flex flex-col gap-1 text-slate-300">
+                          <button onClick={() => moveQuestion(idx, 'up')} className="hover:text-blue-500"><ArrowUp size={14} /></button>
+                          <button onClick={() => moveQuestion(idx, 'down')} className="hover:text-blue-500"><ArrowDown size={14} /></button>
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-bold text-sm text-slate-800">{q.text}</div>
+                          <div className="flex gap-2 mt-1">
+                            <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">{q.type}</span>
+                            {q.required && <span className="text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded uppercase font-bold">Required</span>}
+                            {q.isKnockout && <span className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded uppercase font-bold flex items-center gap-1"><AlertTriangle size={10}/> Must Have</span>}
+                            <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded uppercase font-bold">Weight: {q.weight}</span>
+                          </div>
+                        </div>
+                        <button onClick={() => removeQuestion(idx)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={16} /></button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-lg">
+                    No questions added yet.
+                  </div>
+                )}
+
+                {/* Add Custom Question */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mt-4">
+                  <h5 className="font-bold text-xs uppercase text-slate-500 mb-3">Add Custom Question</h5>
+                  <div className="flex gap-2 mb-3">
+                    <input value={newQText} onChange={e => setNewQText(e.target.value)} className="flex-1 border p-2 rounded text-sm" placeholder="Enter question text..." />
+                    <select value={newQType} onChange={e => setNewQType(e.target.value as any)} className="border p-2 rounded text-sm bg-white">
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                      <option value="yes_no">Yes/No</option>
+                      <option value="file">File Upload</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none">
+                        <input type="checkbox" checked={newQRequired} onChange={e => setNewQRequired(e.target.checked)} className="rounded text-blue-600" /> Required
+                      </label>
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none" title="Auto-reject if answer doesn't match ideal">
+                        <input type="checkbox" checked={newQKnockout} onChange={e => setNewQKnockout(e.target.checked)} className="rounded text-purple-600" /> Must Have (Knockout)
+                      </label>
+                      <div className="flex items-center gap-2 text-sm ml-4">
+                        <span className="text-slate-500">Weight:</span>
+                        <input type="range" min="1" max="5" value={newQWeight} onChange={e => setNewQWeight(parseInt(e.target.value))} className="w-20" />
+                        <span className="font-bold text-slate-700">{newQWeight}</span>
+                      </div>
+                    </div>
+                    <button onClick={addCustomQuestion} disabled={!newQText} className="bg-slate-900 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-slate-800 disabled:opacity-50 transition-colors">
+                      <Plus size={14} className="inline mr-1" /> Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 border-t bg-slate-50 flex justify-end gap-3">
+            <button onClick={() => setShowCreateJob(false)} className="px-6 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-200">Cancel</button>
+            <button 
+              onClick={() => {
+                const newJob: JobPost = {
+                  id: `job-${Date.now()}`,
+                  title: title || 'New Job',
+                  clientName: 'Internal',
+                  clientId: 'cl-new',
+                  jobId: 'NEW-01',
+                  status: 'Sourcing',
+                  prescreenQuestions: questions,
+                  // Defaults for demo
+                  employmentType: 'FULL_TIME',
+                  workMode: 'On-site',
+                  jobLocations: ['Bangalore'],
+                  currency: 'INR',
+                  salaryUnit: 'YEAR',
+                  jobSummary: 'New job summary',
+                  responsibilities: [],
+                  requiredSkills: [],
+                  preferredSkills: [],
+                  toolsTechStack: [],
+                  hiringProcessRounds: [],
+                  slugUrl: 'new-job',
+                  metaTitle: 'New Job',
+                  metaDescription: '',
+                  assignedRecruiterId: 'me',
+                  candidatesJoined: 0,
+                  stats: { matched: 0, contacted: 0, replied: 0 },
+                  benefitsPerks: [],
+                  educationQualification: 'Any',
+                  experienceRequired: 'Any',
+                  numberOfOpenings: 1
+                };
+                setJobs(prev => [newJob, ...prev]);
+                StorageService.saveJob(newJob);
+                setShowCreateJob(false);
+                addToast('Job created with prescreen questions!', 'success');
+              }}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md"
+            >
+              Create Job
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const ActionQueueCard: React.FC<{ action: ActionCard }> = ({ action }) => (
@@ -518,6 +746,11 @@ export const RecruiterWorkspace: React.FC = () => {
                <span className="flex items-center gap-1"><User size={14} /> {candidateCount} Candidates</span>
                <span className="flex items-center gap-1"><Briefcase size={14} /> {job.status}</span>
             </div>
+            {job.prescreenQuestions && job.prescreenQuestions.length > 0 && (
+               <div className="mt-3 flex items-center gap-1 text-[10px] text-purple-600 font-bold bg-purple-50 px-2 py-1 rounded w-fit">
+                  <List size={10} /> {job.prescreenQuestions.length} Screening Qs
+               </div>
+            )}
          </div>
        </div>
      );
@@ -576,6 +809,19 @@ export const RecruiterWorkspace: React.FC = () => {
                         )}
                     </div>
                     <p className="text-xs text-slate-500">{candidate.currentRole} • {candidate.totalExperience} Yrs Exp</p>
+                    
+                    {/* Updated from prescreen Logic */}
+                    {candidate.prescreenAnswers && (
+                        <div className="mt-1 flex gap-2">
+                           <span className="text-[10px] text-green-600 font-bold flex items-center gap-1 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
+                              <CheckSquare size={10} /> Verified Data
+                           </span>
+                           {/* Pick a random recent date or first answer timestamp */}
+                           <span className="text-[10px] text-slate-400 italic">
+                              Updated from prescreen on {(Object.values(candidate.prescreenAnswers)[0] as any)?.timestamp || new Date().toLocaleDateString()}
+                           </span>
+                        </div>
+                    )}
                  </div>
                  <div className="text-right">
                     <div className="text-2xl font-bold text-blue-600">{candidate.matchScore}%</div>
@@ -613,7 +859,7 @@ export const RecruiterWorkspace: React.FC = () => {
               {/* Follow-up Control Panel */}
               <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 flex flex-wrap gap-2 items-center">
                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Status</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase">Status</span>
                     <select value={followUpStatus} onChange={(e) => setFollowUpStatus(e.target.value)} className="text-xs border rounded p-1.5 bg-white outline-none min-w-[120px]">
                         <option value="">Select...</option>
                         <option>Shortlisted</option>
@@ -626,7 +872,7 @@ export const RecruiterWorkspace: React.FC = () => {
                     </select>
                  </div>
                  <div className="flex items-center gap-2">
-                     <span className="text-[10px] font-bold text-slate-400 uppercase">Next</span>
+                     <span className="text-xs font-bold text-slate-400 uppercase">Next</span>
                      <input type="date" value={nextDate} onChange={(e) => setNextDate(e.target.value)} className="text-xs border rounded p-1.5 bg-white outline-none" />
                  </div>
                  <div className="flex-1 min-w-[150px]">
@@ -686,6 +932,33 @@ export const RecruiterWorkspace: React.FC = () => {
 
   const JobDeepDiveView = () => {
       if (!selectedJob) return null;
+      
+      const fileInputRef = useRef<HTMLInputElement>(null);
+
+      const handleRecruiterUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        let rejectedCount = 0;
+        let acceptedCount = 0;
+
+        Array.from(files).forEach((file: File) => {
+            if (file.size > 5 * 1024 * 1024) { // 5MB
+                addToast(`File "${file.name}" is too large (>5MB). Please compress and upload a new file.`, 'error');
+                rejectedCount++;
+            } else {
+                acceptedCount++;
+            }
+        });
+
+        if (acceptedCount > 0) {
+            addToast(`${acceptedCount} resumes uploaded successfully and queued for parsing.`, 'success');
+        }
+        
+        // Reset
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+
       return (
         <div className="flex flex-col h-full bg-slate-50">
            {/* Top Navigation Bar */}
@@ -701,7 +974,18 @@ export const RecruiterWorkspace: React.FC = () => {
                     </div>
                  </div>
                  <div className="flex gap-3">
-                    <button className="bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-50 flex items-center gap-2 transition-colors">
+                    <input 
+                        type="file" 
+                        multiple 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept=".pdf,.doc,.docx"
+                        onChange={handleRecruiterUpload}
+                    />
+                    <button 
+                        onClick={() => fileInputRef.current?.click()} 
+                        className="bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-50 flex items-center gap-2 transition-colors"
+                    >
                        <UploadCloud size={16} /> Upload Resumes
                     </button>
                     <button onClick={() => setShowManualSearch(true)} className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 flex items-center gap-2 transition-colors">

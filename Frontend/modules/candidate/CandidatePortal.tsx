@@ -133,6 +133,12 @@ export const CandidatePortal: React.FC<{ user: User }> = ({ user }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 5 * 1024 * 1024) { // 5MB Limit
+      addToast("File too large (>5MB). Please compress and upload a new file.", 'error');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setIsParsing(true);
     try {
       // Simulate extracting text from file (in production this would be client-side OCR or backend call)

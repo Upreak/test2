@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, Briefcase, LogIn, Zap, ExternalLink, Loader2, FileText, DollarSign, ChevronRight, X, UploadCloud, CheckCircle, Clock, List } from 'lucide-react';
+import { Search, MapPin, Briefcase, LogIn, Zap, ExternalLink, Loader2, FileText, DollarSign, ChevronRight, X, UploadCloud, CheckCircle, Clock, List, HelpCircle, CheckSquare } from 'lucide-react';
 import { PublicJob, PublicJobService } from '../../services/publicJobService';
 import { StorageService } from '../../services/storageService';
 import { useToast } from '../ui/ToastContext';
@@ -51,7 +51,8 @@ const createCandidateFromApplication = (formData: any, jobId: string): Candidate
     drivingLicensePassport: false,
     workHistory: [],
     hasCurrentOffers: false,
-    preferredContactMode: 'Email'
+    preferredContactMode: 'Email',
+    prescreenAnswers: formData.answers // New field
   };
 };
 
@@ -66,10 +67,24 @@ const ApplicationModal: React.FC<ApplicationModalProps> = ({ job, onClose }) => 
     fullName: '',
     email: '',
     phone: '',
-    resume: null as File | null
+    resume: null as File | null,
+    answers: {} as Record<string, { answer: string, timestamp: string }>
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addToast } = useToast();
+
+  const handleAnswerChange = (questionId: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      answers: {
+        ...prev.answers,
+        [questionId]: {
+          answer: value,
+          timestamp: new Date().toLocaleDateString()
+        }
+      }
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,6 +175,69 @@ const ApplicationModal: React.FC<ApplicationModalProps> = ({ job, onClose }) => 
              </div>
            </div>
 
+           {/* Prescreen Questions Section */}
+           {job.prescreenQuestions && job.prescreenQuestions.length > 0 && (
+             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wide">
+                   <List size={16} className="text-blue-600" /> Screening Questions
+                </h4>
+                
+                {job.prescreenQuestions.map((q) => (
+                   <div key={q.id}>
+                      <div className="flex items-center justify-between mb-1">
+                         <label className="block text-sm font-bold text-slate-700">
+                            {q.text} {q.required && <span className="text-red-500">*</span>}
+                         </label>
+                         {/* Mock verification logic for common fields like CTC/Notice Period */}
+                         {(q.text.toLowerCase().includes('ctc') || q.text.toLowerCase().includes('notice')) && (
+                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded flex items-center gap-1 font-bold border border-green-200" title="Data from your previous application">
+                               <CheckSquare size={10} /> Verified 7 days ago
+                            </span>
+                         )}
+                      </div>
+                      
+                      <div className="relative group">
+                         {q.type === 'yes_no' ? (
+                            <select 
+                               required={q.required}
+                               onChange={e => handleAnswerChange(q.id, e.target.value)}
+                               className="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                            >
+                               <option value="">Select...</option>
+                               <option value="Yes">Yes</option>
+                               <option value="No">No</option>
+                            </select>
+                         ) : q.type === 'number' ? (
+                            <input 
+                               type="number"
+                               required={q.required}
+                               onChange={e => handleAnswerChange(q.id, e.target.value)}
+                               className="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                               placeholder="Enter number..."
+                            />
+                         ) : (
+                            <input 
+                               type="text"
+                               required={q.required}
+                               onChange={e => handleAnswerChange(q.id, e.target.value)}
+                               className="w-full border border-slate-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                               placeholder="Your answer..."
+                            />
+                         )}
+                         
+                         {/* Why we ask tooltip */}
+                         <div className="absolute right-3 top-3 text-slate-400 cursor-help group-hover:text-blue-500">
+                            <HelpCircle size={16} />
+                            <div className="absolute right-0 bottom-6 w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                               We ask this to ensure you meet the specific requirements for this role.
+                            </div>
+                         </div>
+                      </div>
+                   </div>
+                ))}
+             </div>
+           )}
+
            <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">Resume / CV <span className="text-red-500">*</span></label>
               <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:bg-slate-50 hover:border-blue-400 transition-colors cursor-pointer relative">
@@ -167,7 +245,20 @@ const ApplicationModal: React.FC<ApplicationModalProps> = ({ job, onClose }) => 
                     type="file" 
                     accept=".pdf,.docx,.doc"
                     required
-                    onChange={e => setFormData({...formData, resume: e.target.files?.[0] || null})}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 5 * 1024 * 1024) { // 5MB Limit
+                          addToast("File too large (>5MB). Please compress and upload a new file.", 'error');
+                          e.target.value = ''; // Reset input
+                          setFormData({...formData, resume: null});
+                          return;
+                        }
+                        setFormData({...formData, resume: file});
+                      } else {
+                        setFormData({...formData, resume: null});
+                      }
+                    }}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                  />
                  <div className="flex flex-col items-center gap-2 text-slate-500">
